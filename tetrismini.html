@@ -102,6 +102,23 @@
     margin-bottom: 18px;
   }
 
+  .now-playing {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 10px;
+    z-index: 18;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 1.2px;
+    color: rgba(255,255,255,0.72);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .menu-stack {
     display: flex;
     flex-direction: column;
@@ -686,7 +703,6 @@
       right: -18px;
     }
   }
-  }
 
   @media (max-height: 760px) {
     .settings-fab, .top-game-btn { width: 36px; height: 36px; font-size: 16px; }
@@ -833,6 +849,7 @@
 
     <div class="flash" id="flash"></div>
     <div id="floating-messages"></div>
+    <div class="now-playing" id="nowPlaying">Playlist en attente</div>
     <div class="game-over" id="gameOver">
       <h2 id="endTitle">GAME OVER</h2>
       <p>Score final :</p>
@@ -857,6 +874,12 @@
       window.__TETRIS_BG_MUSIC__.currentTime = 0;
     } catch (e) {}
   }
+  if (window.__TETRIS_GAME_OVER_AUDIO__ && typeof window.__TETRIS_GAME_OVER_AUDIO__.pause === 'function') {
+    try {
+      window.__TETRIS_GAME_OVER_AUDIO__.pause();
+      window.__TETRIS_GAME_OVER_AUDIO__.currentTime = 0;
+    } catch (e) {}
+  }
 
   const COLS = 12;
   const ROWS = 22;
@@ -867,6 +890,7 @@
   const nextCtx = nextCanvas.getContext('2d');
   const flashEl = document.getElementById('flash');
   const msgContainer = document.getElementById('floating-messages');
+  const nowPlayingEl = document.getElementById('nowPlaying');
   const settingsFab = document.getElementById('settingsFab');
   const topGameActions = document.getElementById('topGameActions');
   const backToMenuBtn = document.getElementById('backToMenuBtn');
@@ -943,6 +967,7 @@
     homeScreen.classList.remove('hidden');
     showMenuScreen(screen);
     pauseMusic();
+    if (!isGameOver) updateNowPlaying('Playlist en pause');
   }
 
   function closeHomeScreen() {
@@ -1381,29 +1406,87 @@
     });
   }
 
+  const playlistTracks = [
+    'Tetris Salsa.mp3',
+    'Tetris cartoon.mp3',
+    'Tetris spy version.mp3',
+    'tetris dubstep.mp3',
+    'western tetris.mp3'
+  ];
+  const gameOverTrack = 'GAME OVER.mp3';
+
   const bgMusic = new Audio();
-  bgMusic.src = 'votre-musique.mp3';
+  const gameOverAudio = new Audio(gameOverTrack);
   window.__TETRIS_BG_MUSIC__ = bgMusic;
-  bgMusic.loop = true;
+  window.__TETRIS_GAME_OVER_AUDIO__ = gameOverAudio;
   bgMusic.volume = 0.50;
+  gameOverAudio.volume = 0.75;
 
   let musicMuted = false;
   let musicVolume = 0.50;
   let musicStarted = false;
+  let currentTrackIndex = 0;
+
+  function getTrackDisplayName(track) {
+    return track.replace(/\.mp3$/i, '');
+  }
+
+  function updateNowPlaying(text) {
+    if (!nowPlayingEl) return;
+    nowPlayingEl.textContent = text;
+  }
+
+  function setPlaylistTrack(index, autoplay = false) {
+    if (!playlistTracks.length) return;
+    currentTrackIndex = (index + playlistTracks.length) % playlistTracks.length;
+    bgMusic.src = playlistTracks[currentTrackIndex];
+    bgMusic.load();
+    updateNowPlaying('♫ ' + getTrackDisplayName(playlistTracks[currentTrackIndex]));
+    if (autoplay && !musicMuted && musicVolume > 0 && isCurrentRuntime()) {
+      bgMusic.play().catch(() => {});
+    }
+  }
+
+  function playNextTrack() {
+    if (!playlistTracks.length) return;
+    setPlaylistTrack(currentTrackIndex + 1, musicStarted && !musicMuted && !isInMenu && !isGameOver);
+  }
+
+  bgMusic.addEventListener('ended', () => {
+    if (!isCurrentRuntime()) return;
+    playNextTrack();
+  });
 
   function startMusic() {
     if (!isCurrentRuntime()) return;
-    if (musicMuted || musicVolume === 0) return;
+    if (musicMuted || musicVolume === 0 || isInMenu || isGameOver) return;
+    if (!bgMusic.src) setPlaylistTrack(currentTrackIndex, false);
     bgMusic.play().catch(() => {});
     musicStarted = true;
   }
 
   function pauseMusic() {
     try { bgMusic.pause(); } catch (e) {}
+    try { gameOverAudio.pause(); } catch (e) {}
   }
+
   function resumeMusic() {
     if (!isCurrentRuntime()) return;
-    if (musicStarted && !musicMuted) bgMusic.play().catch(() => {});
+    if (musicStarted && !musicMuted && !isInMenu && !isGameOver) {
+      if (!bgMusic.src) setPlaylistTrack(currentTrackIndex, false);
+      bgMusic.play().catch(() => {});
+    }
+  }
+
+  function playGameOverMusic() {
+    if (!isCurrentRuntime()) return;
+    if (musicMuted || musicVolume === 0) return;
+    try {
+      gameOverAudio.currentTime = 0;
+      gameOverAudio.volume = Math.min(1, musicVolume + 0.15);
+      gameOverAudio.play().catch(() => {});
+      updateNowPlaying('☠ ' + getTrackDisplayName(gameOverTrack));
+    } catch (e) {}
   }
 
   function toggleMusic() {
@@ -1415,6 +1498,7 @@
   function setMusicVolume(val) {
     musicVolume = Number(val) / 100;
     bgMusic.volume = musicVolume;
+    gameOverAudio.volume = Math.min(1, musicVolume + 0.15);
     syncAudioUI();
     if (musicVolume === 0) pauseMusic(); else resumeMusic();
   }
@@ -2200,8 +2284,10 @@
       soundPerfectClear();
       showFloatingMessage('NIVEAU NETTOYÉ !', 'huge', '#7df9ff');
       document.getElementById('endTitle').innerText = 'VICTOIRE';
+      updateNowPlaying('✓ Niveau terminé');
     } else {
       soundGameOver();
+      playGameOverMusic();
       document.getElementById('endTitle').innerText = 'GAME OVER';
     }
     document.getElementById('finalScore').innerText = player.score.toLocaleString();
@@ -2215,6 +2301,7 @@
 
   function restartGame() {
     if (!isCurrentRuntime()) return;
+    try { gameOverAudio.pause(); gameOverAudio.currentTime = 0; } catch (e) {}
     arena.forEach((row) => row.fill(0));
     arenaOwners.forEach((row) => row.fill(0));
     player.score = 0;
@@ -2289,6 +2376,7 @@
     closeHomeScreen();
     showInGameUI();
     syncAudioUI();
+    if (!bgMusic.src) setPlaylistTrack(0, false);
     resumeMusic();
   }
 
@@ -2301,6 +2389,7 @@
   setupClassicBoard();
   updateScore();
   syncAudioUI();
+  if (playlistTracks.length) setPlaylistTrack(0, false);
   runStartupChecks();
   bindMobileTouchControls();
   update();
