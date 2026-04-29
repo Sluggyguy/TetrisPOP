@@ -1411,7 +1411,8 @@
     'Tetris cartoon.mp3',
     'Tetris spy version.mp3',
     'tetris dubstep.mp3',
-    'western tetris.mp3'
+    'western tetris.mp3',
+    'Tetris Groovy pop.mp3'
   ];
   const gameOverTrack = 'GAME OVER.mp3';
 
@@ -1426,6 +1427,7 @@
   let musicVolume = 0.50;
   let musicStarted = false;
   let currentTrackIndex = 0;
+  let lastRandomTrackIndex = -1;
 
   function getTrackDisplayName(track) {
     return track.replace(/\.mp3$/i, '');
@@ -1445,6 +1447,22 @@
     if (autoplay && !musicMuted && musicVolume > 0 && isCurrentRuntime()) {
       bgMusic.play().catch(() => {});
     }
+  }
+
+  function getRandomTrackIndex(excludeIndex = -1) {
+    if (!playlistTracks.length) return 0;
+    if (playlistTracks.length === 1) return 0;
+    let nextIndex = Math.floor(Math.random() * playlistTracks.length);
+    while (nextIndex === excludeIndex) {
+      nextIndex = Math.floor(Math.random() * playlistTracks.length);
+    }
+    return nextIndex;
+  }
+
+  function chooseRandomTrack(autoplay = false) {
+    const nextIndex = getRandomTrackIndex(currentTrackIndex);
+    lastRandomTrackIndex = nextIndex;
+    setPlaylistTrack(nextIndex, autoplay);
   }
 
   function playNextTrack() {
@@ -2286,7 +2304,6 @@
       document.getElementById('endTitle').innerText = 'VICTOIRE';
       updateNowPlaying('✓ Niveau terminé');
     } else {
-      soundGameOver();
       playGameOverMusic();
       document.getElementById('endTitle').innerText = 'GAME OVER';
     }
@@ -2376,7 +2393,8 @@
     closeHomeScreen();
     showInGameUI();
     syncAudioUI();
-    if (!bgMusic.src) setPlaylistTrack(0, false);
+    chooseRandomTrack(false);
+    musicStarted = true;
     resumeMusic();
   }
 
