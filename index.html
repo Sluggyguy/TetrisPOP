@@ -2319,6 +2319,10 @@
   function restartGame() {
     if (!isCurrentRuntime()) return;
     try { gameOverAudio.pause(); gameOverAudio.currentTime = 0; } catch (e) {}
+    if (playlistTracks.length) {
+      chooseRandomTrack(false);
+      musicStarted = true;
+    }
     arena.forEach((row) => row.fill(0));
     arenaOwners.forEach((row) => row.fill(0));
     player.score = 0;
@@ -2393,9 +2397,6 @@
     closeHomeScreen();
     showInGameUI();
     syncAudioUI();
-    chooseRandomTrack(false);
-    musicStarted = true;
-    resumeMusic();
   }
 
   playClassicBtn.addEventListener('click', () => startGame('classic'));
